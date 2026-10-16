@@ -134,20 +134,42 @@ def parse_response(response) -> dict:
     return payload
 
 
-def api_call(method: str, fields: dict | None = None):
+def _is_retryable(exc: BaseException) -> bool:
+    """Transient network failures worth one silent retry: the server or a
+    proxy dropped an otherwise healthy connection mid-request."""
+    if isinstance(exc, (http.client.RemoteDisconnected,
+                        http.client.IncompleteRead,
+                        TimeoutError, socket.timeout,
+                        ConnectionError)):
+        return True
+    if isinstance(exc, urllib.error.URLError):
+        reason = exc.reason
+        return _is_retryable(reason) if isinstance(reason, BaseException) else False
+    return False
+
+
+def api_call(method: str, fields: dict | None = None, _retries: int = 2):
     body = urllib.parse.urlencode(fields or {}).encode('utf-8')
     request = urllib.request.Request(
         API_ROOT + method,
         data=body,
         headers={'Content-Type': 'application/x-www-form-urlencoded'},
     )
-    try:
-        with urllib.request.urlopen(request, timeout=65 if method == 'getUpdates' else 30) as response:
-            return parse_response(response)['result']
-    except BotError:
-        raise
-    except Exception as exc:
-        raise BotError(f'Telegram API unavailable ({type(exc).__name__})') from None
+    attempt = 0
+    while True:
+        try:
+            with urllib.request.urlopen(request, timeout=65 if method == 'getUpdates' else 30) as response:
+                return parse_response(response)['result']
+        except BotError:
+            raise
+        except Exception as exc:
+            if _is_retryable(exc) and attempt < _retries:
+                attempt += 1
+                log.warning('api_call %s transient failure (%s); retry %d/%d',
+                            method, type(exc).__name__, attempt, _retries)
+                time.sleep(min(2 ** attempt, 4))
+                continue
+            raise BotError(f'Telegram API unavailable ({type(exc).__name__})') from None
 
 
 def send_text(chat_id: int, text: str) -> None:
