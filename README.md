@@ -32,6 +32,8 @@ Tanpa systemd, jalankan manual: `sudo ./run.sh` (atau via tmux:
 
 Bot menggunakan **long polling**. Satu token bot hanya boleh dipolling oleh satu proses pada satu waktu. Token bot yang saat ini dipakai bot Sandbox tidak boleh dijalankan bersamaan di VM ini: Telegram dapat mengembalikan konflik polling. Jika kedua mesin perlu aktif bersamaan, buat bot Telegram baru melalui BotFather dan gunakan token baru hanya di `bot.env` VM ini. Alternatifnya, hentikan proses lama sebelum memakai token yang sama.
 
+Koneksi ke Telegram yang sempat putus sesaat (mis. `RemoteDisconnected` dari proxy) di-retry otomatis dan diam-diam hingga 2x — tidak mengganggu perintah yang sedang berjalan.
+
 ## Manual: pasang service systemd sendiri
 
 `install.sh` sudah melakukannya otomatis. Jika ingin manual, buat
